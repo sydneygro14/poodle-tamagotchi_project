@@ -23,7 +23,7 @@ The project targets `esp32dev` (ESP32-WROOM-32 dev board).
 - `include/Sprites.h`: sprite declarations
 
 
-Browser display preview - made by Claude :)  ->  https://sydneygro14.github.io/poodle-tamagotchi_project/previews/
+Browser display preview - made by Claude  ->  https://sydneygro14.github.io/poodle-tamagotchi_project/previews/
 
  
 
@@ -33,19 +33,19 @@ How the game works:
 
 The Tamagotchi features a pixel-art poodle with different animations, interactive activities, and three main needs: hunger, happiness, and energy
 
-Home: The poodle walks around the screen while its hunger, happiness, and energy levels are displayed.
+- Home: The poodle walks around the screen while its hunger, happiness, and energy levels are displayed.
 
-Feed: Feed the poodle to increase its hunger stat, with a cute eating animation
+- Feed: Feed the poodle to increase its hunger stat, with a cute eating animation
 
-Play: Play a 15-second mini-game where you move the poodle left and right to catch falling strawberries and earn happiness points
+- Play: Play a 15-second mini-game where you move the poodle left and right to catch falling strawberries and earn happiness points
 
-Sleep: Put the poodle to sleep to restore its energy
+- Sleep: Put the poodle to sleep to restore its energy
 
-Clean: Clean up after the poodle to improve its happiness
+- Clean: Clean up after the poodle to improve its happiness
 
-Emotions: The poodle displays different expressions and animations depending on its needs, such as becoming sad when hungry or unhappy.
+- Emotions: The poodle displays different expressions and animations depending on its needs, such as becoming sad when hungry or unhappy.
 
-Settings: Toggle sound effects on or off.
+- Settings: Toggle sound effects on or off.
 
 The game also saves pet stats, so its progress is preserved when the ESP32 restarts!
 
