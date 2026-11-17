@@ -22,9 +22,11 @@ The project targets `esp32dev` (ESP32-WROOM-32 dev board).
 - `src/Sprites.cpp`: RGB565 pet image data (original design wass drawn by hand, then converted to pixels)
 - `include/Sprites.h`: sprite declarations
 
-Browser display preview - made by Claude AI :)  ->  
+
+## Browser display preview - made by Claude :)  ->  https://sydneygro14.github.io/poodle-tamagotchi_project/previews/
+
  
-This preserves the prior Arduino code and sprites, rearranged for PlatformIO
+This repo preserves the prior Arduino code and sprites, rearranged for PlatformIO
 ----------------------------------------------------------------------------------------
 
 How the game works:
@@ -46,3 +48,4 @@ Emotions: The poodle displays different expressions and animations depending on 
 Settings: Toggle sound effects on or off.
 
 The game also saves pet stats, so its progress is preserved when the ESP32 restarts!
+
