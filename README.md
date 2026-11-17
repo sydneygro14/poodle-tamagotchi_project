@@ -23,7 +23,7 @@ The project targets `esp32dev` (ESP32-WROOM-32 dev board).
 - `include/Sprites.h`: sprite declarations
 
 
-## Browser display preview - made by Claude :)  ->  https://sydneygro14.github.io/poodle-tamagotchi_project/previews/
+Browser display preview - made by Claude :)  ->  https://sydneygro14.github.io/poodle-tamagotchi_project/previews/
 
  
 This repo preserves the prior Arduino code and sprites, rearranged for PlatformIO
