@@ -7,14 +7,98 @@
 #include <pgmspace.h>
 #include "Sprites.h"
 
-// ========================================
-// 1. hardware configuration
+// Wiring for ESP32-WROOM-32 30-pin and a 7-pin 240x240 ST7789 TFT.
+// Screen SCL -> GPIO18; SDA -> GPIO23; RES -> GPIO22; DC -> GPIO21.
+// Screen VCC -> 3V3; GND -> GND; BLK -> 3V3 only if supported by the module.
+// Screen CS is absent and is assumed permanently selected by the module.
+// Buttons use GPIO32, GPIO33 and GPIO27, each to GND.
+// Buzzer on GPIO26 only if rated for direct 3.3V GPIO drive.
+constexpr int TFT_SCLK = 18;
+constexpr int TFT_MOSI = 23;
+constexpr int TFT_DC   = 21;
+constexpr int TFT_RST  = 22;
+constexpr int TFT_CS   = -1;
+constexpr int BTN_LEFT = 32;
+constexpr int BTN_RIGHT = 33;
+constexpr int BTN_OK = 27;
+constexpr int BUZZER = 26;
+constexpr int W = 240;
+constexpr int H = 240;
+constexpr int PET_Y = 112;
+constexpr int PET_W = 90;
+constexpr int PET_H = 90;
 
-// display pins
-// button pins
-// buzzer pin
-// screen and sprite dimensions
+// RGB565 theme colors
+constexpr uint16_t DAY_BG     = 0xFFDD; // soft warm cream
+constexpr uint16_t NIGHT_BG   = 0x18CB; // deep midnight navy for sleep
+constexpr uint16_t STAR_WHITE = 0xFFFF;
+constexpr uint16_t STAR_GOLD  = 0xFFB5;
+constexpr uint16_t PINK       = 0xF554;
+constexpr uint16_t ROSE       = 0xDAAD;
+constexpr uint16_t PLUM       = 0x698C;
+constexpr uint16_t WHITE      = 0xFFFF;
+constexpr uint16_t BLACK      = 0x0000;
 
+Adafruit_ST7789 tft(TFT_CS, TFT_DC, TFT_RST);
+Preferences prefs;
+
+
+enum GameState { HOME, MENU, SETTINGS, MINI_GAME };
+enum PetAction { WALK, SLEEP, EAT, PLAY, SAD };
+GameState screenState = HOME;
+PetAction action = WALK;
+
+struct Button {
+  int pin;
+  bool lastSample = HIGH;
+  bool stable = HIGH;
+  unsigned long changedAt = 0;
+  bool poll() {
+    bool sample = digitalRead(pin);
+    if (sample != lastSample) { lastSample = sample; changedAt = millis(); }
+    if (millis() - changedAt > 30 && sample != stable) {
+      stable = sample;
+      return stable == LOW;
+    }
+    return false;
+  }
+};
+Button leftButton{BTN_LEFT}, rightButton{BTN_RIGHT}, okButton{BTN_OK};
+
+
+// this 
+int hunger = 65, happy = 75, energy = 100, poops = 0;
+int petX = 76, moveDx = 3, frameNo = 0, menuIndex = 0, settingsIndex = 0;
+int miniScore = 0, treatX = 90, treatY = 50;
+unsigned long lastFrame = 0, lastMove = 0, lastStats = 0, lastPoop = 0;
+unsigned long actionUntil = 0, miniStart = 0, lastFall = 0, lastSaved = 0;
+bool sleeping = false, muted = false, forceRedraw = true;
+bool homeNightDrawn = false;
+
+void chirp(unsigned freq = 950, unsigned ms = 60) {
+  if (!muted) tone(BUZZER, freq, ms);
+}
+int clampStat(int value) { return constrain(value, 0, 100); }
+void savePet() {
+  prefs.putInt("hunger", hunger);
+  prefs.putInt("happy", happy);
+  prefs.putInt("energy", energy);
+  prefs.putInt("poops", poops);
+}
+
+// Draw a 16-bit sprite; 0x0000 is transparent.  Each pixel's RGB565
+// color is preserved; this is NOT 1-bit/black-and-white rendering.
+void drawSprite(int x, int y, int w, int h, const uint16_t* image, bool flip = false) {
+  tft.startWrite();
+  for (int row = 0; row < h; ++row) {
+    for (int col = 0; col < w; ++col) {
+      int from = flip ? (w - 1 - col) : col;
+      uint16_t color = pgm_read_word(image + row * w + from);
+      if (color != BLACK) tft.writePixel(x + col, y + row, color);
+    }
+  }
+  tft.endWrite();
+}
 
 
 // ========================================
@@ -107,7 +191,7 @@
 
 
 
-
+ 
 // ========================================
 // 11. main game loop
 
