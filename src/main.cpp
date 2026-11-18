@@ -66,7 +66,6 @@ struct Button {
 Button leftButton{BTN_LEFT}, rightButton{BTN_RIGHT}, okButton{BTN_OK};
 
 
-// this 
 int hunger = 65, happy = 75, energy = 100, poops = 0;
 int petX = 76, moveDx = 3, frameNo = 0, menuIndex = 0, settingsIndex = 0;
 int miniScore = 0, treatX = 90, treatY = 50;
@@ -101,15 +100,173 @@ void drawSprite(int x, int y, int w, int h, const uint16_t* image, bool flip = f
 }
 
 
-// ========================================
-// 2. colors and display objects
+const uint16_t* spriteForAction() {
+  switch (action) {
+    case WALK:  return walk_frames[frameNo];
+    case SLEEP: return sleep_frames[frameNo];
+    case EAT:   return eat_frames[frameNo];
+    case PLAY:  return play_frames[frameNo];
+    case SAD:   return sad_frames[frameNo];
+  }
+  return neutral_original;
+}
 
-// cream daytime background
-// navy nighttime background
-// stars and interface colors
+// The same sprite artwork is used in both modes. Only the background changes.
+uint16_t homeBackground() { return sleeping ? NIGHT_BG : DAY_BG; }
+uint16_t homeTextColor() { return sleeping ? STAR_GOLD : PLUM; }
 
-// create tft display object
-// create preferences object
+struct Star { uint8_t x, y, radius; };
+// Fixed positions keep the stars stationary as the sprite animates.
+constexpr Star STARS[] = {
+  {12, 64, 1}, {39, 91, 1}, {63, 59, 1}, {89, 82, 1},
+  {113, 69, 1}, {145, 96, 1}, {172, 62, 1}, {230, 108, 1},
+  {22, 132, 1}, {55, 155, 1}, {98, 119, 1}, {132, 147, 1},
+  {183, 170, 1}, {222, 148, 1}, {11, 184, 1}, {70, 192, 1},
+  {153, 188, 1}, {214, 197, 1}, {33, 221, 1}, {116, 215, 1},
+  {190, 228, 1}
+};
+
+void drawStarsInBand(int fromY, int toY) {
+  if (!sleeping) return;
+  for (const auto& star : STARS) {
+    if (star.y >= fromY && star.y < toY)
+      tft.fillCircle(star.x, star.y, star.radius,
+                     (star.x % 2 == 0) ? STAR_WHITE : STAR_GOLD);
+  }
+}
+
+void drawNightSky() {
+  if (!sleeping) return;
+  drawStarsInBand(52, H);
+  // A small crescent moon in the upper-right, below the status panel.
+  tft.fillCircle(204, 79, 12, STAR_GOLD);
+  tft.fillCircle(210, 73, 11, NIGHT_BG);
+}
+
+void drawStatus() {
+  uint16_t bg = homeBackground();
+  uint16_t fg = homeTextColor();
+  tft.fillRect(0, 0, W, 52, bg);
+  tft.setTextSize(2);
+  tft.setTextColor(fg, bg);
+  tft.setCursor(8, 5);
+  tft.print("Hng:"); tft.print(hunger);
+  tft.setCursor(126, 5);
+  tft.print("Hap:"); tft.print(happy);
+  tft.setCursor(8, 28); tft.print("Energy");
+  tft.drawRoundRect(88, 28, 144, 13, 3, fg);
+  tft.fillRect(91, 31, 138 * energy / 100, 7,
+               sleeping ? STAR_GOLD : PINK);
+}
+void drawPoops() {
+  for (int i = 0; i < poops && i < 3; ++i)
+    drawSprite(14 + i * 30, 204, 20, 20, poop_frame);
+}
+void drawHomeBase() {
+  tft.fillScreen(homeBackground());
+  homeNightDrawn = sleeping;
+  drawNightSky();
+  drawStatus();
+  tft.drawFastHLine(0, 202, W, homeTextColor());
+  tft.setTextColor(homeTextColor(), homeBackground());
+  tft.setTextSize(1);
+  tft.setCursor(68, 230);
+  tft.print("ACTION: MENU");
+  drawPoops();
+}
+void drawHomePet() {
+  // Redraw only the moving sprite strip; restore stars in that strip first.
+  tft.fillRect(0, PET_Y, W, PET_H, homeBackground());
+  drawStarsInBand(PET_Y, PET_Y + PET_H);
+  drawSprite(petX, PET_Y, PET_W, PET_H, spriteForAction(), moveDx < 0);
+}
+
+const char* MENU_ITEMS[6] = {"Feed", "Play", "Sleep", "Clean", "Settings", "Exit"};
+void drawMenu() {
+  drawHomeBase();
+  // The menu pauses the poodle's animation and shows her original neutral pose.
+  drawSprite(petX, 140, PET_W, PET_H, neutral_original, false);
+  tft.fillRoundRect(23, 35, 194, 168, 10, BLACK);
+  tft.drawRoundRect(23, 35, 194, 168, 10, WHITE);
+  tft.setTextSize(2);
+  for (int i = 0; i < 6; ++i) {
+    const int yy = 47 + i * 27;
+    tft.setCursor(46, yy);
+    tft.setTextColor(i == menuIndex ? PINK : WHITE, BLACK);
+    tft.print(i == menuIndex ? ">" : " ");
+    tft.setCursor(71, yy);
+    tft.print(MENU_ITEMS[i]);
+  }
+}
+void drawSettings() {
+  tft.fillScreen(DAY_BG);
+  tft.setTextSize(2); tft.setTextColor(PLUM, DAY_BG);
+  tft.setCursor(33, 24); tft.print("Settings");
+  tft.setCursor(30, 95);
+  tft.print(settingsIndex == 0 ? ">" : " ");
+  tft.print("Sound: "); tft.print(muted ? "OFF" : "ON");
+  tft.setCursor(30, 132);
+  tft.print(settingsIndex == 1 ? ">" : " "); tft.print("Back");
+}
+void startAction(PetAction next, unsigned durationMs = 0) {
+  action = next;
+  frameNo = 0;
+  actionUntil = durationMs ? millis() + durationMs : 0;
+  forceRedraw = true;
+}
+void updatePetNeeds() {
+  if (millis() - lastStats < 30000) return;
+  lastStats = millis();
+  if (sleeping) {
+    energy = clampStat(energy + 10);
+    if (energy >= 100) { sleeping = false; startAction(WALK); }
+  } else {
+    hunger = clampStat(hunger - 1);
+    happy  = clampStat(happy - (poops > 0 ? 2 : 1));
+    energy = clampStat(energy - 1);
+    if (energy <= 0) { sleeping = true; startAction(SLEEP); }
+    else if (hunger <= 20 || happy <= 20) startAction(SAD);
+    else if (action == SAD) startAction(WALK);
+  }
+  forceRedraw = true;
+  savePet();
+}
+void enterHome() {
+  screenState = HOME;
+  drawHomeBase();
+  forceRedraw = true;
+}
+void startMiniGame() {
+  screenState = MINI_GAME;
+  miniScore = 0;
+  miniStart = millis();
+  lastFall = millis();
+  treatX = random(10, W - 26);
+  treatY = 45;
+  petX = 76;
+  frameNo = 0;
+  chirp(1150, 70);
+  forceRedraw = true;
+}
+void renderMiniGame() {
+  tft.fillScreen(DAY_BG);
+  tft.setTextColor(PLUM, DAY_BG); tft.setTextSize(2);
+  tft.setCursor(8, 7); tft.print("Score:"); tft.print(miniScore);
+  tft.setCursor(146, 7); tft.print("T:");
+  tft.print(max(0, 15 - int((millis() - miniStart) / 1000)));
+  tft.drawFastHLine(0, 36, W, PLUM);
+  drawSprite(treatX, treatY, 16, 16, treat_frame);
+  drawSprite(petX, 130, PET_W, PET_H, walk_frames[frameNo], moveDx < 0);
+  tft.setTextColor(PLUM, DAY_BG); tft.setTextSize(1);
+  tft.setCursor(31, 230); tft.print("LEFT / RIGHT TO CATCH");
+}
+void finishMiniGame() {
+  happy = clampStat(happy + 15 + (miniScore >= 5 ? 10 : 0));
+  energy = clampStat(energy - 10);
+  savePet();
+  startAction(PLAY, 3000);
+  enterHome();
+}
 
 
 
