@@ -143,8 +143,6 @@ int miniScore = 0;
 int treatX = 90;
 int treatY = 50;
 
-
-// millis is used so the game can keep running without delays
 // each timer tracks when something last happened
 unsigned long lastFrame = 0;
 unsigned long lastMove = 0;
@@ -692,7 +690,7 @@ void renderMiniGame() {
   tft.print("LEFT / RIGHT TO CATCH");
 }
 
-
+///////////////////////////////////
 // finishMiniGame
 
 // calculates the happiness reward after the game
@@ -724,97 +722,150 @@ void finishMiniGame() {
 }
 
 
+void setup() {
+  Serial.begin(115200);
+  pinMode(BTN_LEFT, INPUT_PULLUP);
+  pinMode(BTN_RIGHT, INPUT_PULLUP);
+  pinMode(BTN_OK, INPUT_PULLUP);
+  pinMode(BUZZER, OUTPUT);
+  SPI.begin(TFT_SCLK, -1, TFT_MOSI, -1);
+  tft.init(240, 240);
+  tft.setRotation(0);
+  // If your panel displays inverted colors, try tft.invertDisplay(false)
+  prefs.begin("poodle", false);
+  hunger = clampStat(prefs.getInt("hunger", 65));
+  happy = clampStat(prefs.getInt("happy", 75));
+  energy = clampStat(prefs.getInt("energy", 100));
+  poops = constrain(prefs.getInt("poops", 0), 0, 3);
+  randomSeed(esp_random());
+  drawHomeBase();
+  drawHomePet();
+  chirp(950, 110);
+  lastStats = lastFrame = lastMove = lastPoop = millis();
+}
+
+void loop() {
+  unsigned long now = millis();
+  bool l = leftButton.poll();
+  bool r = rightButton.poll();
+  bool ok = okButton.poll();
+
+  if (screenState == MENU) {
+    if (l || r) {
+      menuIndex = (menuIndex + (r ? 1 : 5)) % 6;
+      chirp(750, 32); drawMenu();
+    }
+    if (ok) {
+      chirp(950, 45);
+      switch (menuIndex) {
+        case 0:
+          sleeping = false;
+          hunger = clampStat(hunger + 20);
+          savePet(); startAction(EAT, 3000); enterHome(); break;
+        case 1:
+          sleeping = false; startMiniGame(); break;
+        case 2:
+          sleeping = !sleeping;
+          startAction(sleeping ? SLEEP : WALK); enterHome(); break;
+        
+case 3:
+    if (poops > 0) {
+        poops = 0;
+        happy = clampStat(happy + 5);
+        savePet();
+    }
+
+    startAction(sleeping ? SLEEP : WALK);
+    enterHome();
+    break;
+
+        case 4:
+          screenState = SETTINGS; settingsIndex = 0; drawSettings(); break;
+        case 5:
+          enterHome(); break;
+      }
+    }
+    return;
+  }
+
+  
+  if (screenState == SETTINGS) {
+    if (l || r) { settingsIndex = 1 - settingsIndex; chirp(); drawSettings(); }
+    if (ok) {
+      if (settingsIndex == 0) { muted = !muted; drawSettings(); }
+      else { screenState = MENU; menuIndex = 4; drawMenu(); }
+    }
+    return;
+  }
+  if (screenState == MINI_GAME) {
+    if (l) { petX = max(0, petX - 16); moveDx = -3; }
+    if (r) { petX = min(W - PET_W, petX + 16); moveDx = 3; }
+    if (now - lastFall >= 85) {
+      lastFall = now;
+      treatY += 4;
+      if (treatY >= 124 && treatY <= 206 &&
+          (treatX + 16 > petX + 6) && (treatX < petX + PET_W - 6)) {
+        miniScore++;
+        chirp(1175, 30);
+        treatX = random(10, W - 26);
+        treatY = 45;
+      } else if (treatY > 224) {
+        treatX = random(10, W - 26);
+        treatY = 45;
+      }
+      frameNo = (frameNo + 1) % 4;
+      renderMiniGame();
+    }
+    if (now - miniStart > 15000) finishMiniGame();
+    return;
+  }
+
+  // Main screen: no game-over - low needs cause sadness/rest
+  if (ok) {
+    screenState = MENU;
+    menuIndex = 0;
+    chirp(930, 45);
+    drawMenu();
+    return;
+  }
+  updatePetNeeds();
+  if (!sleeping && now - lastPoop >= 300000UL) {
+    lastPoop = now;
+    if (poops < 3) {
+      ++poops;
+      savePet();
+      drawHomeBase();
+      forceRedraw = true;
+    }
+  }
 
 
-// ========================================
-// 3. game states and data
+  if (actionUntil && now >= actionUntil) {
+    actionUntil = 0;
+    startAction(sleeping ? SLEEP : ((hunger <= 20 || happy <= 20) ? SAD : WALK));
+  }
 
-// game screen states
-// pet animation states
+  
+  if (now - lastFrame >= 150) {
+    lastFrame = now;
+    frameNo = (frameNo + 1) % 4;
+    forceRedraw = true;
+  }
 
-// button struct for debouncing
+  if (action == WALK && now - lastMove >= 110) {
+    lastMove = now;
+    petX += moveDx;
+    if (petX <= 0) { petX = 0; moveDx = 3; }
+    if (petX >= W - PET_W) { petX = W - PET_W; moveDx = -3; }
+    forceRedraw = true;
+  }
 
-// pet stats
-// pet position and animation frame
-// menu selection
-// mini-game score and positions
+  if (forceRedraw) {
+    // On sleep/wake transitions, repaint the entire scene only once
+    if (homeNightDrawn != sleeping) drawHomeBase();
+    drawStatus();
+    drawHomePet();
+    forceRedraw = false;
+  }
+}
 
-// timers
-// sleeping and sound settings
-
-
-// ========================================
-// 4. utility and storage functions
-
-// chirp()              play buzzer tones
-// clampStat()          keep stats from 0 to 100
-// savePet()            save stats to esp32 memory
-
-
-// ========================================
-// 5. sprite rendering
-
-// drawSprite()         draw rgb565 sprite
-// spriteForAction()    select animation frame
-
-// ========================================
-// 6. backgrounds
-
-// homeBackground()     choose cream or navy
-// homeTextColor()      choose text color
-// drawStarsInBand()    draw stars in screen area
-// drawNightSky()       draw stars and moon
-
-
-
-// ========================================
-// 7. screen rendering
-
-// drawStatus()         hunger happiness energy
-// drawPoops()          poop icons
-// drawHomeBase()       home background and interface
-// drawHomePet()        animated poodle
-// drawMenu()           activity selection
-// drawSettings()       sound settings
-
-// ========================================
-// 8. pet behavior
-
-// startAction()        start pet animation
-// updatePetNeeds()     update hunger happiness energy
-// enterHome()          return to home screen
-
-// ========================================
-// 9. strawberry mini-game
-
-// startMiniGame()      initialize mini-game
-// renderMiniGame()     draw falling strawberries
-// finishMiniGame()     calculate rewards
-
-// ========================================
-// 10. setup
-
-// setup()
-// configure button pins
-// initialize buzzer and display
-// load saved pet stats
-// draw initial home screen
-// initialize timers
-
-
-
-
- 
-// ========================================
-// 11. main game loop
-
-// loop()
-// poll button inputs
-// handle menu selections
-// handle settings
-// update strawberry mini-game
-// update pet needs
-// generate poop every five minutes
-// update animations
-// update walking movement
-// redraw screen when needed
